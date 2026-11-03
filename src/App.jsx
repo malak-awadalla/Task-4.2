@@ -38,6 +38,7 @@ export default function App(){
  const [query,setQuery] = useState('');
  const [category,setCategory] = useState('all');
  const [sort,setSort] = useState('featured');
+ const [showMyListingsOnly, setShowMyListingsOnly] = useState(false);
  const [selected,setSelected] = useState(null);
  const [editor,setEditor] = useState(null); // null or {id,form}
  const [error,setError] = useState('');
@@ -45,23 +46,173 @@ export default function App(){
  const [notice,setNotice] = useState('');
  useEffect(()=>localStorage.setItem(KEY,JSON.stringify(items)),[items]);
  useEffect(()=>setActivePhoto(0),[selected]);
- const listing = useMemo(()=>{let a=items.filter(x=>(category==='all'||x.category===category)&&`${x.title} ${x.category} ${x.description}`.toLowerCase().includes(query.toLowerCase()));if(sort==='low')a.sort((a,b)=>a.price-b.price);if(sort==='high')a.sort((a,b)=>b.price-a.price);return a;},[items,category,query,sort]);
- function startEdit(item){if(item&&item.owner!=='you')return;setError('');setEditor({id:item?.id||null,form:item?{title:item.title,price:String(item.price),category:item.category,condition:item.condition,description:item.description,pickup:item.pickup || '',status:item.status}:{...emptyForm}});}
+ const listing = useMemo(()=>{
+   let a=items.filter(x => 
+     (showMyListingsOnly ? x.owner === 'you' : true) &&
+     (category==='all'||x.category===category) &&
+     `${x.title} ${x.category} ${x.description}`.toLowerCase().includes(query.toLowerCase())
+   );
+   if(sort==='low')a.sort((a,b)=>a.price-b.price);
+   if(sort==='high')a.sort((a,b)=>b.price-a.price);
+   return a;
+ },[items,category,query,sort,showMyListingsOnly]);
+
+ function startEdit(item){if(item&&item.owner!=='you')return;setError('');setSelected(null);setEditor({id:item?.id||null,form:item?{title:item.title,price:String(item.price),category:item.category,condition:item.condition,description:item.description,pickup:item.pickup || '',status:item.status}:{...emptyForm}});}
  function submit(event){event.preventDefault();const f=editor.form;const err=findError(f);if(err){setError('Unable to save item. Check the form.');return;}const original=editor.id?items.find(x=>x.id===editor.id):null;const next={...f, title:f.title.trim(),price:Number(f.price),description:f.description.trim(),pickup:f.pickup.trim(),photos:original?.photos || [],emoji:original?.emoji || '📦',owner:'you',seller:currentUser.name,sellerEmail:currentUser.email};
  if(editor.id){setItems(items.map(x=>x.id===editor.id?{...x,...next}:x));setNotice('Changes saved.');}else{setItems([{...next,id:`m-${Date.now()}`,status:'active'},...items]);setNotice('Item listed.');}setEditor(null);setSelected(null);}
- function reset(){setItems(seed);setSelected(null);setEditor(null);setQuery('');setCategory('all');setSort('featured');setNotice('Example items restored.');}
+ function reset(){setItems(seed);setSelected(null);setEditor(null);setQuery('');setCategory('all');setSort('featured');setShowMyListingsOnly(false);setNotice('Example items restored.');}
  return <div className="market-app">
   <div className="utility"><span>Campus Exchange</span><span>Trusted by students • All prices in EGP</span></div>
-  <header className="navigation"><button className="brand" onClick={()=>{setSelected(null);setCategory('all')}}><span className="brand-icon">✳</span> CAMPUS<span className="brand-alt">exchange</span></button><nav><a href="#discover">Browse items</a><button onClick={()=>setCategory('textbooks')}>Textbooks</button><button onClick={()=>setCategory('electronics')}>Electronics</button></nav><div className="nav-actions"><span className="usercircle">Y</span><button className="sell-cta" onClick={()=>startEdit(null)}>+ Sell an item</button></div></header>
+  
+  <header className="navigation">
+    <button className="brand" onClick={()=>{setSelected(null);setCategory('all');setEditor(null);setShowMyListingsOnly(false);}}>
+      <span className="brand-icon">✳</span> CAMPUS<span className="brand-alt">exchange</span>
+    </button>
+    
+    <div className="header-search-container" style={{ flex: 1, margin: '0 1.5rem' }}>
+      <label className="search" style={{ width: '100%', display: 'flex' }}>
+        <span>⌕</span>
+        <input aria-label="Search listings" placeholder="Search items across campus..." value={query} onChange={e=>setQuery(e.target.value)} style={{ width: '100%' }}/>
+      </label>
+    </div>
+
+    <div className="nav-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+      <button 
+        className={`my-listings-btn ${showMyListingsOnly ? 'active' : ''}`} 
+        onClick={() => { setEditor(null); setShowMyListingsOnly(!showMyListingsOnly); }}
+        style={{
+          padding: '0.5rem 0.85rem',
+          borderRadius: '4px',
+          border: '1px solid #ccc',
+          background: showMyListingsOnly ? '#111' : '#fff',
+          color: showMyListingsOnly ? '#fff' : '#111',
+          cursor: 'pointer',
+          fontSize: '0.875rem'
+        }}
+      >
+        {showMyListingsOnly ? '✓ My Listings' : 'My Listings'}
+      </button>
+      <span className="usercircle">Y</span>
+      <button className="sell-cta" onClick={()=>startEdit(null)}>+ Sell an item</button>
+    </div>
+  </header>
+
   <main>
-   <section className="promo"><div className="promo-copy"><span className="tag">THE CAMPUS MARKETPLACE</span><h1>Everything you need,<br/><i>right around campus.</i></h1><p>Browse little finds, big essentials and almost everything in between.</p><button onClick={()=>document.getElementById('discover')?.scrollIntoView({behavior:'smooth'})}>Explore listings <span>↗</span></button></div><div className="promo-art"><span>📚</span><span>💡</span><span>🎧</span><span>🛋️</span></div></section>
-   <section className="discovery" id="discover"><div className="discover-top"><div><p className="section-kicker">CURATED FOR YOUR CAMPUS</p><h2>Find something good.</h2><p>Items listed by people around you.</p></div><div className="discover-right"><label className="search"><span>⌕</span><input aria-label="Search listings" placeholder="Search listings" value={query} onChange={e=>setQuery(e.target.value)}/></label><label className="sort"><span>Sort</span><select value={sort} onChange={e=>setSort(e.target.value)}><option value="featured">Featured</option><option value="low">Price: low to high</option><option value="high">Price: high to low</option></select></label></div></div>
-    <div className="category-row">{categories.map(c=><button key={c} onClick={()=>setCategory(c)} className={category===c?'on':''}>{c==='all'?'All items':cap(c)}</button>)}</div>
-    {notice&&<p className="notice" role="status">{notice} <button onClick={()=>setNotice('')}>×</button></p>}
-    <div className="listing-grid">{listing.map(item=><article className="product" key={item.id}><button className="photo" onClick={()=>setSelected(item.id)}><span className="stamp">{cap(item.condition)}</span><ListingImage src={item.photos?.[0]} alt={item.title} emoji={item.emoji} className="listing-img" /><span className="category-caption">{cap(item.category)}</span></button><div className="prod-details"><div className="prod-topline"><span className="muted">{item.category}</span><span className={item.status==='sold'?'soldstatus':'instock'}>{item.status.toUpperCase()}</span></div><h3>{item.title}</h3><p>{item.description}</p><div className="costline"><strong>EGP {item.price.toLocaleString()}</strong><span>{item.condition}</span></div><button className="details-button" onClick={()=>setSelected(item.id)}>View item <span>↗</span></button></div></article>)}{listing.length===0&&<p className="noresults">No listings match your search.</p>}</div>
-   </section>
-   <footer><strong>CAMPUS exchange</strong><span>From students, for students.</span><button onClick={reset}>Reset demo</button></footer>
+   {editor ? (
+     <div className="sell-full-page" style={{ maxWidth: '800px', margin: '3rem auto', padding: '0 1.5rem 4rem 1.5rem', width: '100%' }}>
+       <div className="modal-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1.5rem' }}>
+         <div>
+           <p className="section-kicker">CAMPUS EXCHANGE</p>
+           <h2>{editor.id ? 'Edit your listing' : 'Sell an item'}</h2>
+           <p>Add the details below and publish it to the campus marketplace.</p>
+         </div>
+         <button className="close" onClick={()=>setEditor(null)} style={{ fontSize: '1.5rem', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
+       </div>
+       <form onSubmit={submit}>
+         <div className="field-grid">
+           <label><span>Item title *</span><input value={editor.form.title} onChange={e=>setEditor(s=>({...s,form:{...s.form,title:e.target.value}}))} placeholder="What are you selling?"/></label>
+           <label><span>Price (EGP) *</span><input type="number" min="0" step="0.01" value={editor.form.price} onChange={e=>setEditor(s=>({...s,form:{...s.form,price:e.target.value}}))} placeholder="Price"/></label>
+           <label><span>Category *</span><select value={editor.form.category} onChange={e=>setEditor(s=>({...s,form:{...s.form,category:e.target.value}}))}><option value="">Select</option>{categories.slice(1).map(c=><option value={c} key={c}>{cap(c)}</option>)}</select></label>
+           <label><span>Condition *</span><select value={editor.form.condition} onChange={e=>setEditor(s=>({...s,form:{...s.form,condition:e.target.value}}))}><option value="">Select</option>{conditions.map(c=><option value={c} key={c}>{cap(c)}</option>)}</select></label>
+           <label className="wide"><span>Description</span><textarea value={editor.form.description} onChange={e=>setEditor(s=>({...s,form:{...s.form,description:e.target.value}}))} placeholder="Description" rows="5"/></label>
+           <label className="wide"><span>Pickup / meetup location</span><input value={editor.form.pickup} onChange={e=>setEditor(s=>({...s,form:{...s.form,pickup:e.target.value}}))} placeholder="e.g. Library entrance or arrange on campus" /></label>
+           <label className="wide"><span>Seller contact email</span><input value={currentUser.email} readOnly aria-readonly="true" className="readonly-input"/><small className="email-helper">Taken from your registered account, so buyers can contact you about this item.</small></label>
+           {editor.id&&<label><span>Status</span><select value={editor.form.status} onChange={e=>setEditor(s=>({...s,form:{...s.form,status:e.target.value}}))}><option value="active">Active</option><option value="sold">Sold</option></select></label>}
+         </div>
+         {error&&<p className="alert" role="alert" style={{ marginTop: '1rem', color: '#d93838' }}>{error}</p>}
+         <div className="modal-foot" style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+           <button type="button" onClick={()=>setEditor(null)} style={{ padding: '0.75rem 1.5rem', background: '#f1f1f1', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
+           <button className="sell-cta" type="submit" style={{ padding: '0.75rem 1.5rem' }}>{editor.id?'Save changes':'Publish item'}</button>
+         </div>
+       </form>
+     </div>
+   ) : (
+     <>
+       {/* Compact Banner Box preserving original text sizing */}
+       <section className="promo" style={{ padding: '1.25rem 2rem', minHeight: 'auto', marginBottom: '1.25rem' }}>
+         <div className="promo-copy">
+           <span className="tag">THE CAMPUS MARKETPLACE</span>
+           <h1 style={{ margin: '0.35rem 0' }}>Everything you need,<br/><i>right around campus.</i></h1>
+           <p style={{ margin: 0 }}>Browse little finds, big essentials and almost everything in between.</p>
+         </div>
+         <div className="promo-art"><span>📚</span><span>💡</span><span>🎧</span><span>🛋️</span></div>
+       </section>
+
+       <section className="discovery" id="discover">
+        <div className="discover-top">
+          <div>
+            <p className="section-kicker">CURATED FOR YOUR CAMPUS</p>
+            <h2>{showMyListingsOnly ? 'My Listings' : 'Find something good.'}</h2>
+            <p>{showMyListingsOnly ? 'Items you have posted for sale.' : 'Items listed by people around you.'}</p>
+          </div>
+          <div className="discover-right">
+            <label className="sort">
+              <span>Sort</span>
+              <select value={sort} onChange={e=>setSort(e.target.value)}>
+                <option value="featured">Featured</option>
+                <option value="low">Price: low to high</option>
+                <option value="high">Price: high to low</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        
+        <div className="category-row">{categories.map(c=><button key={c} onClick={()=>setCategory(c)} className={category===c?'on':''}>{c==='all'?'All items':cap(c)}</button>)}</div>
+        {notice&&<p className="notice" role="status">{notice} <button onClick={()=>setNotice('')}>×</button></p>}
+        
+        <div className="listing-grid">
+          {listing.map(item => (
+            <article className="product" key={item.id}>
+              <button className="photo" onClick={()=>setSelected(item.id)} style={{ position: 'relative', overflow: 'hidden' }}>
+                <span className="stamp">{cap(item.condition)}</span>
+                <ListingImage src={item.photos?.[0]} alt={item.title} emoji={item.emoji} className="listing-img" />
+                <span className="category-caption">{cap(item.category)}</span>
+                
+                {/* Overlay shade for sold items */}
+                {item.status === 'sold' && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    fontSize: '1.25rem',
+                    letterSpacing: '0.1em',
+                    zIndex: 2
+                  }}>
+                    SOLD
+                  </div>
+                )}
+              </button>
+              <div className="prod-details">
+                <div className="prod-topline">
+                  <span className="muted">{item.category}</span>
+                  <span className={item.status==='sold'?'soldstatus':'instock'}>{item.status.toUpperCase()}</span>
+                </div>
+                <h3>{item.title}</h3>
+                <p>{item.description}</p>
+                <div className="costline">
+                  <strong>EGP {item.price.toLocaleString()}</strong>
+                  <span>{item.condition}</span>
+                </div>
+                <button className="details-button" onClick={()=>setSelected(item.id)}>View item <span>↗</span></button>
+              </div>
+            </article>
+          ))}
+          {listing.length===0&&<p className="noresults">No listings match your selection.</p>}
+        </div>
+       </section>
+       <footer><strong>CAMPUS exchange</strong><span>From students, for students.</span><button onClick={reset}>Reset demo</button></footer>
+     </>
+   )}
   </main>
+  
   {selected&&(()=>{
    const item=items.find(x=>x.id===selected);if(!item)return null;
    const images=item.photos || [];
@@ -81,13 +232,12 @@ export default function App(){
      <div className="detail-meta"><p><strong>Pickup</strong><br/>{item.pickup || 'Arrange directly with seller'}</p><p><strong>Seller</strong><br/>{item.seller}</p></div>
      <p className="muted">Status: {item.status}</p>
      {item.owner==='you'
-       ? <button className="sell-cta" onClick={()=>startEdit(item)}>Edit your listing</button>
-       : item.status==='sold'
-         ? <p className="fineprint">This item is marked as sold.</p>
-         : <a className="sell-cta contact-seller" href={`mailto:${item.sellerEmail}?subject=${subject}&body=${body}`}>✉ Contact seller</a>}
+        ? <button className="sell-cta" onClick={()=>startEdit(item)}>Edit your listing</button>
+        : item.status==='sold'
+          ? <p className="fineprint">This item is marked as sold.</p>
+          : <a className="sell-cta contact-seller" href={`mailto:${item.sellerEmail}?subject=${subject}&body=${body}`}>✉ Contact seller</a>}
     </section>
    </div>;
   })()}
-  {editor&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setEditor(null)}><section className="sell-modal" role="dialog" aria-modal="true" aria-label={editor.id?'Edit item':'Sell item'}><div className="modal-head"><div><p className="section-kicker">CAMPUS EXCHANGE</p><h2>{editor.id?'Edit your listing':'Sell an item'}</h2><p>Add the details and we'll take care of the rest.</p></div><button className="close" onClick={()=>setEditor(null)}>×</button></div><form onSubmit={submit}><div className="field-grid"><label><span>Item title *</span><input value={editor.form.title} onChange={e=>setEditor(s=>({...s,form:{...s.form,title:e.target.value}}))} placeholder="What are you selling?"/></label><label><span>Price (EGP) *</span><input type="number" min="0" step="0.01" value={editor.form.price} onChange={e=>setEditor(s=>({...s,form:{...s.form,price:e.target.value}}))} placeholder="Price"/></label><label><span>Category *</span><select value={editor.form.category} onChange={e=>setEditor(s=>({...s,form:{...s.form,category:e.target.value}}))}><option value="">Select</option>{categories.slice(1).map(c=><option value={c} key={c}>{cap(c)}</option>)}</select></label><label><span>Condition *</span><select value={editor.form.condition} onChange={e=>setEditor(s=>({...s,form:{...s.form,condition:e.target.value}}))}><option value="">Select</option>{conditions.map(c=><option value={c} key={c}>{cap(c)}</option>)}</select></label><label className="wide"><span>Description</span><textarea value={editor.form.description} onChange={e=>setEditor(s=>({...s,form:{...s.form,description:e.target.value}}))} placeholder="Description" rows="5"/></label><label className="wide"><span>Pickup / meetup location</span><input value={editor.form.pickup} onChange={e=>setEditor(s=>({...s,form:{...s.form,pickup:e.target.value}}))} placeholder="e.g. Library entrance or arrange on campus" /></label><label className="wide"><span>Seller contact email</span><input value={currentUser.email} readOnly aria-readonly="true" className="readonly-input"/><small className="email-helper">Taken from your registered account, so buyers can contact you about this item.</small></label>{editor.id&&<label><span>Status</span><select value={editor.form.status} onChange={e=>setEditor(s=>({...s,form:{...s.form,status:e.target.value}}))}><option value="active">Active</option><option value="sold">Sold</option></select></label>}</div>{error&&<p className="alert" role="alert">{error}</p>}<div className="modal-foot"><button type="button" onClick={()=>setEditor(null)}>Cancel</button><button className="sell-cta" type="submit">{editor.id?'Save changes':'Publish item'}</button></div></form></section></div>}
  </div>;
 }
